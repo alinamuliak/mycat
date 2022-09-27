@@ -12,6 +12,9 @@ int open_files(char* filenames[], int array_length, std::vector<int>& descriptor
     int fd;
 
     for (int i = 1; i < array_length; ++i) {
+        if (!strcmp(filenames[i], "-A") || !strcmp(filenames[i], "--A-flag")) {
+            continue;
+        }
         while ((fd = open(filenames[i], O_RDONLY)) < 0) {
             if (errno == EINTR) {
                 continue;
@@ -69,8 +72,6 @@ int cat(const int argc, char* argv[]) {
     int status;
     int result;
     std::vector<int> descriptors;
-    // todo: check if there are flags in argv
-
     result = open_files(argv, argc, descriptors, &status);
     if (result != 0) {
         perror("");
