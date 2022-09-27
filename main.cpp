@@ -7,6 +7,8 @@
 #include <string>
 #include "options_parser.h"
 
+#define BUF_SIZE 80000
+
 
 int open_files(char* filenames[], int array_length, std::vector<int>& descriptors, int *status) {
     int fd;
@@ -45,10 +47,29 @@ int read_to_buffer(int file_descriptor, char buf[], int buffer_size, int *status
     return read_bytes;
 }
 
-int write_to_stdout(int n, char buf[], int *status) {
+int write_to_stdout(int buf_size, char buf[], int *status) {
     int written_bytes = 0;
-    while (written_bytes < n) {
-        int written_now = write(1, buf + written_bytes, n - written_bytes);
+    char formatted_buffer[BUF_SIZE * 4];
+    int current_size = 0;
+    for (int i = 0; i < buf_size; ++i) {
+        std::cout << buf[i] << std::endl;
+        if ((isprint(buf[i]) == 0) && (isspace(buf[i]) == 0)) {
+            char hex_code[4];
+            sprintf(hex_code, "\\x%2X", (unsigned char)buf[i]);
+            for (auto ch: hex_code) {
+                if (ch == ' ') {
+                    continue;
+                }
+                formatted_buffer[current_size] = ch;
+                current_size += 1;
+            }
+        } else {
+            formatted_buffer[current_size] = buf[i];
+            current_size += 1;
+        }
+    }
+    while (written_bytes < current_size) {
+        int written_now = write(1, formatted_buffer + written_bytes, current_size - written_bytes);
         if (written_now == -1) {
             if (errno == EINTR) {
                 continue;
@@ -60,8 +81,6 @@ int write_to_stdout(int n, char buf[], int *status) {
             written_bytes += written_now;
         }
     }
-    // todo: should i chack for errno here too?
-    write(1, "\n", 1);
     return 0;
 }
 
@@ -79,10 +98,9 @@ int cat(const int argc, char* argv[]) {
     }
 
     for (auto descr : descriptors) {
-        const size_t megabyte = 80000;     // todo: change variable name
-        char buf[megabyte];
+        char buf[BUF_SIZE];
 
-        int read_bytes = read_to_buffer(descr, buf, megabyte, &status);
+        int read_bytes = read_to_buffer(descr, buf, BUF_SIZE, &status);
         if (read_bytes < 0) {
             perror("");
             return status;
