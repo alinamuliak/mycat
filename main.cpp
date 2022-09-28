@@ -7,13 +7,13 @@
 #include <string>
 #include "options_parser.h"
 
-#define BUF_SIZE 80000
+#define BUF_SIZE 10000
 
 
-int open_files(char* filenames[], int array_length, std::vector<int>& descriptors, int *status) {
+int open_files(char* filenames[], size_t array_length, std::vector<int>& descriptors, int *status) {
     int fd;
 
-    for (int i = 1; i < array_length; ++i) {
+    for (size_t i = 1; i < array_length; ++i) {
         if (!strcmp(filenames[i], "-A") || !strcmp(filenames[i], "--A-flag")) {
             continue;
         }
@@ -30,46 +30,46 @@ int open_files(char* filenames[], int array_length, std::vector<int>& descriptor
     return 0;
 }
 
-int read_to_buffer(int file_descriptor, char buf[], int buffer_size, int *status) {
+int read_to_buffer(int file_descriptor, char buf[], size_t buffer_size, int *status) {
     int read_bytes = 0;
-    int n;
-    while ((n = read(file_descriptor, buf, buffer_size)) != 0) {
-        if (n == -1) {
+    while (read_bytes < buffer_size) {
+        int read_now = read(file_descriptor, buf, buffer_size - read_bytes);
+        if (read_now == 0) {
+            break;
+        }
+        if (read_now == -1) {
             if (errno == EINTR) {
                 continue;
             } else {
-                 *status = errno;
+                *status = errno;
                 return -1;
             }
+        } else {
+            read_bytes += read_now;
         }
-        read_bytes += n;
     }
     return read_bytes;
 }
 
-int write_to_stdout(int buf_size, char buf[], int *status) {
-    int written_bytes = 0;
-    char formatted_buffer[BUF_SIZE * 4];
-    int current_size = 0;
-    for (int i = 0; i < buf_size; ++i) {
-        std::cout << buf[i] << std::endl;
-        if ((isprint(buf[i]) == 0) && (isspace(buf[i]) == 0)) {
-            char hex_code[4];
-            sprintf(hex_code, "\\x%2X", (unsigned char)buf[i]);
-            for (auto ch: hex_code) {
-                if (ch == ' ') {
-                    continue;
-                }
-                formatted_buffer[current_size] = ch;
-                current_size += 1;
+int write_to_stdout(size_t buf_size, char buf[], bool A_flag, int *status) {
+    if (A_flag) {
+        std::string formatted_buffer;
+        char hex_code[5];
+        for (size_t i = 0; i < buf_size; ++i) {
+            if (!isprint(buf[i]) && !isspace(buf[i])) {
+                sprintf(hex_code, "\\x%2X", (unsigned char) buf[i]);
+                formatted_buffer.append(hex_code);
+            } else {
+                formatted_buffer.push_back(buf[i]);
             }
-        } else {
-            formatted_buffer[current_size] = buf[i];
-            current_size += 1;
         }
+        buf_size = formatted_buffer.size();
+        buf = formatted_buffer.data();
     }
-    while (written_bytes < current_size) {
-        int written_now = write(1, formatted_buffer + written_bytes, current_size - written_bytes);
+
+    size_t written_bytes = 0;
+    while (written_bytes < buf_size) {
+        int written_now = write(1, buf + written_bytes, buf_size - written_bytes);
         if (written_now == -1) {
             if (errno == EINTR) {
                 continue;
@@ -85,9 +85,7 @@ int write_to_stdout(int buf_size, char buf[], int *status) {
 }
 
 
-int cat(const int argc, char* argv[]) {
-    // todo: add -A flag
-
+int cat(const int argc, char* argv[], bool A_flag) {
     int status;
     int result;
     std::vector<int> descriptors;
@@ -98,17 +96,18 @@ int cat(const int argc, char* argv[]) {
     }
 
     for (auto descr : descriptors) {
-        char buf[BUF_SIZE];
+        char buf[BUF_SIZE + 1];
+        int n;
 
-        int read_bytes = read_to_buffer(descr, buf, BUF_SIZE, &status);
-        if (read_bytes < 0) {
-            perror("");
-            return status;
-        }
-
-        if ((result = write_to_stdout(read_bytes, buf, &status)) != 0) {
-            perror("");
-            return status;
+        while ((n = read_to_buffer(descr, buf, BUF_SIZE, &status)) > 0) {
+            if (n < 0) {
+                perror("");
+                return status;
+            }
+            if ((result = write_to_stdout(n, buf, A_flag, &status)) != 0) {
+                perror("");
+                return status;
+            }
         }
     }
     return 0;
@@ -119,6 +118,6 @@ int main(int argc, char* argv[]) {
     command_line_options_t command_line_options{argc, argv};
     std::cout << "A flag value: " << command_line_options.get_A_flag() << std::endl;
 
-    cat(argc, argv);
+    cat(argc, argv, command_line_options.get_A_flag());
     return 0;
 }
