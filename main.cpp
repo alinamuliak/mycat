@@ -31,7 +31,7 @@ int open_files(char* filenames[], size_t array_length, std::vector<int>& descrip
 }
 
 int read_to_buffer(int file_descriptor, char buf[], size_t buffer_size, int *status) {
-    int read_bytes = 0;
+    size_t read_bytes = 0;
     while (read_bytes < buffer_size) {
         int read_now = read(file_descriptor, buf, buffer_size - read_bytes);
         if (read_now == 0) {
@@ -51,10 +51,11 @@ int read_to_buffer(int file_descriptor, char buf[], size_t buffer_size, int *sta
     return read_bytes;
 }
 
+
 int write_to_stdout(size_t buf_size, char buf[], bool A_flag, int *status) {
+    std::string formatted_buffer;
+    char hex_code[5];
     if (A_flag) {
-        std::string formatted_buffer;
-        char hex_code[5];
         for (size_t i = 0; i < buf_size; ++i) {
             if (!isprint(buf[i]) && !isspace(buf[i])) {
                 sprintf(hex_code, "\\x%2X", (unsigned char) buf[i]);
@@ -94,7 +95,6 @@ int cat(const int argc, char* argv[], bool A_flag) {
         perror("");
         return status;
     }
-
     for (auto descr : descriptors) {
         char buf[BUF_SIZE + 1];
         int n;
@@ -116,8 +116,6 @@ int cat(const int argc, char* argv[], bool A_flag) {
 
 int main(int argc, char* argv[]) {
     command_line_options_t command_line_options{argc, argv};
-    std::cout << "A flag value: " << command_line_options.get_A_flag() << std::endl;
-
-    cat(argc, argv, command_line_options.get_A_flag());
-    return 0;
+    int return_code = cat(argc, argv, command_line_options.get_A_flag());
+    return return_code;
 }
